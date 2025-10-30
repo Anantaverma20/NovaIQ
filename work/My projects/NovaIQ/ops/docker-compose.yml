@@ -1,0 +1,83 @@
+version: '3.8'
+
+services:
+  # FastAPI backend
+  api:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=sqlite:///./data/novaiq.db
+      - CHROMA_PERSIST_DIR=/data/chroma
+      - REDIS_URL=redis://redis:6379/0
+      # TODO: add API keys from .env
+    volumes:
+      - ../backend:/app
+      - backend-data:/data
+    depends_on:
+      - redis
+      - chroma
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    networks:
+      - novaiq
+
+  # Redis for task queue
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - novaiq
+
+  # ChromaDB vector store
+  # TODO: Use official ChromaDB image or mount local directory
+  chroma:
+    image: chromadb/chroma:latest
+    ports:
+      - "8001:8000"
+    volumes:
+      - chroma-data:/chroma/chroma
+    environment:
+      - ANONYMIZED_TELEMETRY=False
+    networks:
+      - novaiq
+
+  # Optional: Celery worker for background tasks
+  # worker:
+  #   build:
+  #     context: ../backend
+  #   command: celery -A app.tasks.schedule worker --loglevel=info
+  #   depends_on:
+  #     - api
+  #     - redis
+  #   volumes:
+  #     - ../backend:/app
+  #   networks:
+  #     - novaiq
+
+  # Optional: Celery beat for scheduled tasks
+  # beat:
+  #   build:
+  #     context: ../backend
+  #   command: celery -A app.tasks.schedule beat --loglevel=info
+  #   depends_on:
+  #     - api
+  #     - redis
+  #   volumes:
+  #     - ../backend:/app
+  #   networks:
+  #     - novaiq
+
+volumes:
+  backend-data:
+  redis-data:
+  chroma-data:
+
+networks:
+  novaiq:
+    driver: bridge
+
